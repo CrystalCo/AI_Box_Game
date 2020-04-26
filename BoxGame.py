@@ -20,6 +20,12 @@ class BoxGame:
         # If player = 1, it is human's turn. Player = 0 == AI turn
         self.player = player
         self.game_on = True
+        self.adj_edge_dict = {
+            'top_edge': (int(-len(self.state)**0.5), 'bottom_edge'),
+            'bottom_edge': (int(len(self.state)**0.5), 'top_edge'),
+            'left_edge': (-1, 'right_edge'),
+            'right_edge': (1, 'left_edge')
+        }
     
     def _generate_board(self, boxes):
         """ 
@@ -48,7 +54,10 @@ class BoxGame:
 
     def _get_human_move(self):
         # TODO: Return list of possible moves instead of board state
-        print("\nBoard state:\n{}\n".format(self.state))
+        print("\nBoard state:")
+        # print("\nBoard state:\n{}\n".format(self.state))
+        legal_moves = self._get_possible_moves(self.state)
+        print(legal_moves)
         
         # Read human's move input
         value_in = input("Enter the box id and edge you want to flip. Separate answer with a space. " + 
@@ -79,7 +88,7 @@ class BoxGame:
 
     def _add_points(self, box):
         """ Adds points to player """
-        if self._player:
+        if self._player():
             self.player_max_score += self.state[box]['weight']
             print("Human scores.  Human total: {}. AI total: {}.\n".format(self.player_max_score, self.player_min_score))
         else:
@@ -90,13 +99,16 @@ class BoxGame:
         """ Flip edge state from 0 (available) to 1 (filled) """
         if not self._get_edge_val(box, edge):
             self.state[box][edge] = 1
-            print("New state of box: {}.\n".format(self.state[box]))
             # Check if box filled
             self._box_filled(box)
+            print("New state of box: {}.\n".format(self.state[box]))
             # Check adjacent edges
             self._set_adj_edges(box, edge)
         else:
-            print("Illegal move")
+            # Prints illegal move if edge is already filled.
+            # print("Illegal move")
+            # This is also a way for _set_adj_edges & _set_edge to break out of an infinite loop 
+            return
 
     def _set_adj_edges(self, box, edge):
         """ Marks off adjacent edges """
@@ -108,22 +120,70 @@ class BoxGame:
         # Edge cases
         if box == 0:
             if edge == 'right_edge':
-                self.state[box+1]['left_edge'] = 1
+                self._set_edge(box+1, 'left_edge')
+                # self.state[box+1]['left_edge'] = 1
             elif edge == 'bottom_edge':
-                x = math.sqrt(boxes)
-                self.state[x]['top_edge'] = 1
+                x = int(math.sqrt(boxes))
+                # self.state[x]['top_edge'] = 1
+                self._set_edge(x, 'top_edge')
         elif box == last_box_index:
             if edge == 'left_edge':
-                self.state[last_box_index - 1]['right_edge'] = 1
+                # self.state[last_box_index - 1]['right_edge'] = 1
+                self._set_edge(last_box_index - 1, 'right_edge')
             elif edge == 'top_edge':
                 box_above_index = int(boxes - math.sqrt(boxes) - 1)
-                self.state[box_above_index]['bottom_edge'] = 1
-        # TODO: Finish middle edges for bigger boards
+                # self.state[box_above_index]['bottom_edge'] = 1
+                self._set_edge(box_above_index, 'bottom_edge')
+        # Middle Cases
+        elif self._is_double_edge(box, edge):
+            new_box, new_edge = self.adj_edge_dict[edge]
+            new_box += box
+            self._set_edge(new_box, new_edge)
         # print("Adjacent edges filled in: {}\n".format(self.state))
+
+    def _is_double_edge(self, box, edge):
+        """ 
+        Checks adjacent edges in the middle of the board 
+        Returns True if the edges touch an adjacent box; returns False otherwise.
+        """
+        result = True
+        # Another way to get sqrt of total boxes on board
+        s = int(len(self.state) ** 0.5)
+        # 1st row
+        if box < s and edge == 'top_edge':
+            result = False
+        # Last row
+        if box >= s * (s-1) and edge == 'bottom_edge':
+            result = False
+        # Left row
+        if box % s == 0 and edge == 'left_edge':
+            result = False
+        # Right row
+        if (box + 1) % s == 0 and edge == 'right_edge':
+            result = False
+        return result
 
     def _get_possible_moves(self, state):
         '''  Returns a list of available edges. '''
-        return 
+        available_edges = []
+        # Need a counter for index of available edges since boxes that are closed will be skipped
+        available_boxes_counter = 0
+        for i in state:
+            if i['box_closed'] == False:
+                available_edges.append({
+                    'box_id': i['box_id'],
+                    'weight': i['weight']
+                })
+                if i['top_edge'] == 0:
+                    available_edges[available_boxes_counter]['top_edge'] = 0
+                if i['bottom_edge'] == 0:
+                    available_edges[available_boxes_counter]['bottom_edge'] = 0
+                if i['right_edge'] == 0:
+                    available_edges[available_boxes_counter]['right_edge'] = 0
+                if i['left_edge'] == 0:
+                    available_edges[available_boxes_counter]['left_edge'] = 0
+                available_boxes_counter += 1
+        return available_edges
 
     def Play_game(self):
         """ Plays the game until there is a winner or human terminates game. """
