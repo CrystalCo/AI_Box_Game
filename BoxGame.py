@@ -1,5 +1,7 @@
 # Crystal Contreras     SPRING 2020 CSC-480
 import random
+import math
+
 # in check functions, keep in mind alpha-beta pruning 
 # to set up 
 
@@ -91,8 +93,33 @@ class BoxGame:
             print("New state of box: {}.\n".format(self.state[box]))
             # Check if box filled
             self._box_filled(box)
+            # Check adjacent edges
+            self._set_adj_edges(box, edge)
         else:
             print("Illegal move")
+
+    def _set_adj_edges(self, box, edge):
+        """ Marks off adjacent edges """
+        boxes = len(self.state)
+        if boxes == 1:
+            # single box board doesn't have adjacent boxes to check 
+            return
+        last_box_index = boxes - 1
+        # Edge cases
+        if box == 0:
+            if edge == 'right_edge':
+                self.state[box+1]['left_edge'] = 1
+            elif edge == 'bottom_edge':
+                x = math.sqrt(boxes)
+                self.state[x]['top_edge'] = 1
+        elif box == last_box_index:
+            if edge == 'left_edge':
+                self.state[last_box_index - 1]['right_edge'] = 1
+            elif edge == 'top_edge':
+                box_above_index = int(boxes - math.sqrt(boxes) - 1)
+                self.state[box_above_index]['bottom_edge'] = 1
+        # TODO: Finish middle edges for bigger boards
+        # print("Adjacent edges filled in: {}\n".format(self.state))
 
     def _get_possible_moves(self, state):
         '''  Returns a list of available edges. '''
