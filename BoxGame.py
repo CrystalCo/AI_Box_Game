@@ -52,11 +52,9 @@ class BoxGame:
     def _get_random_num(self):
         return random.randint(1, 5)
 
-    def _get_human_move(self):
-        # TODO: Return list of possible moves instead of board state
+    def _get_human_move(self, state):
         print("\nBoard state:")
-        # print("\nBoard state:\n{}\n".format(self.state))
-        legal_moves = self._get_possible_moves(self.state)
+        legal_moves = self._get_possible_moves(state)
         print(legal_moves)
         
         # Read human's move input
@@ -72,6 +70,55 @@ class BoxGame:
 
         # If it is legal, make that move (change assigned edge state)
         self._set_edge(box, edge)
+
+    def _get_AI_move(self):
+        """ AKA Minimax """
+        # move = self.MiniMax_Decision(self.state)
+        # print("AI move: ", move)
+        # self._set_edge(move[0], move[1])
+        return
+
+    def MiniMax_Decision(self, state):
+        """ Returns an action ? """
+        # Compute the element a of set S that has a maximum value of f(a)
+        # Get legal moves
+        print("\nBoard state:")
+        legal_moves = self._get_possible_moves(self.state)
+        print(legal_moves)
+        # For each action available, return the utility value 
+        for i in legal_moves:
+            if i['top_edge']:
+                self._min_value(self._result(state, action))
+        return max() 
+
+    def _min_value(self, state):
+        """ returns a utility value """
+        if self._terminal_test(state):
+            return self._utility(state)
+        # v = infinity
+        # v = 999999
+
+    def _get_possible_moves(self, state):
+        '''  Returns a list of available edges. '''
+        available_edges = []
+        # Need a counter for index of available edges since boxes that are closed will be skipped
+        available_boxes_counter = 0
+        for i in state:
+            if i['box_closed'] == False:
+                available_edges.append({
+                    'box_id': i['box_id'],
+                    'weight': i['weight']
+                })
+                if i['top_edge'] == 0:
+                    available_edges[available_boxes_counter]['top_edge'] = 0
+                if i['bottom_edge'] == 0:
+                    available_edges[available_boxes_counter]['bottom_edge'] = 0
+                if i['right_edge'] == 0:
+                    available_edges[available_boxes_counter]['right_edge'] = 0
+                if i['left_edge'] == 0:
+                    available_edges[available_boxes_counter]['left_edge'] = 0
+                available_boxes_counter += 1
+        return available_edges
 
     def _get_edge_val(self, box, edge):
         """ Returns the value within the box's edge selected. """
@@ -117,29 +164,24 @@ class BoxGame:
             # single box board doesn't have adjacent boxes to check 
             return
         last_box_index = boxes - 1
-        # Edge cases
+        # Corner cases
         if box == 0:
             if edge == 'right_edge':
                 self._set_edge(box+1, 'left_edge')
-                # self.state[box+1]['left_edge'] = 1
             elif edge == 'bottom_edge':
                 x = int(math.sqrt(boxes))
-                # self.state[x]['top_edge'] = 1
                 self._set_edge(x, 'top_edge')
         elif box == last_box_index:
             if edge == 'left_edge':
-                # self.state[last_box_index - 1]['right_edge'] = 1
                 self._set_edge(last_box_index - 1, 'right_edge')
             elif edge == 'top_edge':
                 box_above_index = int(boxes - math.sqrt(boxes) - 1)
-                # self.state[box_above_index]['bottom_edge'] = 1
                 self._set_edge(box_above_index, 'bottom_edge')
         # Middle Cases
         elif self._is_double_edge(box, edge):
             new_box, new_edge = self.adj_edge_dict[edge]
             new_box += box
             self._set_edge(new_box, new_edge)
-        # print("Adjacent edges filled in: {}\n".format(self.state))
 
     def _is_double_edge(self, box, edge):
         """ 
@@ -163,39 +205,20 @@ class BoxGame:
             result = False
         return result
 
-    def _get_possible_moves(self, state):
-        '''  Returns a list of available edges. '''
-        available_edges = []
-        # Need a counter for index of available edges since boxes that are closed will be skipped
-        available_boxes_counter = 0
-        for i in state:
-            if i['box_closed'] == False:
-                available_edges.append({
-                    'box_id': i['box_id'],
-                    'weight': i['weight']
-                })
-                if i['top_edge'] == 0:
-                    available_edges[available_boxes_counter]['top_edge'] = 0
-                if i['bottom_edge'] == 0:
-                    available_edges[available_boxes_counter]['bottom_edge'] = 0
-                if i['right_edge'] == 0:
-                    available_edges[available_boxes_counter]['right_edge'] = 0
-                if i['left_edge'] == 0:
-                    available_edges[available_boxes_counter]['left_edge'] = 0
-                available_boxes_counter += 1
-        return available_edges
-
     def Play_game(self):
         """ Plays the game until there is a winner or human terminates game. """
 
         while(self.game_on):
             if self._player:
-                self._get_human_move()
+                # Human's turn
+                self._get_human_move(self.state)
             else:
-                self._get_human_move()
+                # AI's turn
+                self._get_AI_move(self.state)
                 
             self._terminal_test(self.state)
-            self._player_switch()
+            if(self.game_on):
+                self._player_switch()
         
     def _player(self):
         """ 
@@ -229,24 +252,27 @@ class BoxGame:
         States where the game has ended are called terminal states.
         Terminal state is when all edges are filled/popped.
         """
-        # if (self._get_possible_moves(state) = 0):
-        #     if self.player_max_score > self.player_min_score:
-        #         print("Player Max Won!")
-        #     elif self.player_max_score < self.player_min_score:
-        #         print("Player Min Won!")
-        #     else:
-        #         print("Tie!")
-        #     self.game_on = False
-        #     return True
-        # else:
-        return False
+        if self._get_possible_moves(state) == []:
+            if self.player_max_score > self.player_min_score:
+                print("Player Max Won!")
+            elif self.player_max_score < self.player_min_score:
+                print("Player Min Won!")
+            else:
+                print("Tie!")
+            self.game_on = False
+            return True
+        else:
+            return False
 
-
-    def _utility(self, state, player):
+    def _utility(self, state):
         """A payoff function.  Defines the final numeric value for a game 
         that ends in terminal state s for a player p. 
         Outcome is win, loss, or draw (+1, 0, 1/2)
         """
+        if self._player():
+            return self.player_max_score
+        else:
+            return self.player_min_score
 
         
 easy_2x2 = 4   # boxes
