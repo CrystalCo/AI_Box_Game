@@ -1,6 +1,7 @@
 # Crystal Contreras     SPRING 2020 CSC-480
 import random
 import math
+import heapq
 
 # in check functions, keep in mind alpha-beta pruning 
 # to set up 
@@ -53,9 +54,8 @@ class BoxGame:
         return random.randint(1, 5)
 
     def _get_human_move(self, state):
-        print("\nBoard state:")
         legal_moves = self._get_possible_moves(state)
-        print(legal_moves)
+        print("\nLegal Moves:\n{}".format(legal_moves))
         
         # Read human's move input
         value_in = input("Enter the box id and edge you want to flip. Separate answer with a space. " + 
@@ -70,33 +70,65 @@ class BoxGame:
 
         # If it is legal, make that move (change assigned edge state)
         self._set_edge(box, edge)
+        
 
-    def _get_AI_move(self):
+    def _get_AI_move(self, state):
         """ AKA Minimax """
-        # move = self.MiniMax_Decision(self.state)
-        # print("AI move: ", move)
+        move = self.MiniMax_Decision(state)
+        print("AI move: ", move)
         # self._set_edge(move[0], move[1])
         return
 
     def MiniMax_Decision(self, state):
         """ Returns an action ? """
         # Compute the element a of set S that has a maximum value of f(a)
-        # Get legal moves
-        print("\nBoard state:")
         legal_moves = self._get_possible_moves(self.state)
-        print(legal_moves)
-        # For each action available, return the utility value 
-        for i in legal_moves:
-            if i['top_edge']:
-                self._min_value(self._result(state, action))
-        return max() 
+        print("\nLegal Moves:\n{}".format(legal_moves))
 
-    def _min_value(self, state):
+        # default returns min at front. To get max, mult val by -
+        pq = []
+
+        t = 'top_edge'
+        b = 'bottom_edge'
+        r = 'right_edge'
+        l = 'left_edge'
+        # For each action available, return the utility value 
+        for m in legal_moves:
+            boxID = m['box_id']
+            if m[t]:
+                h = self.ply_limit
+                action = [boxID, t]
+                t_val = self._min_value(self._value(state, action, h))
+                heapq.heappush(pq, (t_val * -1, action))
+            if m[b]:
+                h = self.ply_limit
+                action = [boxID, b]
+                b_val = self._min_value(self._value(state, action, h))
+                heapq.heappush(pq, (b_val * -1, action))
+            if m[r]:
+                h = self.ply_limit
+                action = [boxID, r]
+                r_val = self._min_value(self._value(state, action, h))
+                heapq.heappush(pq, (r_val * -1, action))
+            if m[l]:
+                h = self.ply_limit
+                action = [boxID, l]
+                l_val = self._min_value(self._value(state, action, h))
+                heapq.heappush(pq, (l_val * -1, action))
+
+        # TODO: tie-breaker for returned vals. Maybe choose edge if all are 0
+        # Return max
+        return heapq.heappop(pq) 
+
+    def _min_value(self, state, horizon):
         """ returns a utility value """
-        if self._terminal_test(state):
-            return self._utility(state)
         # v = infinity
-        # v = 999999
+        v = 999999
+        legal_moves = self._get_possible_moves(state)
+        for move in legal_moves:
+            v = max(v, self._min_value(self._value(state, move, horizon - 1)))
+        return v 
+
 
     def _get_possible_moves(self, state):
         '''  Returns a list of available edges. '''
@@ -223,8 +255,8 @@ class BoxGame:
     def _player(self):
         """ 
         Defines which player has the move in a state. 
-        True  = Human
-        False = AI 
+        True  = Human;      False = AI
+        Player max = human;   Player min = AI 
         """
         return self.player
 
@@ -242,15 +274,43 @@ class BoxGame:
             print("Human's turn now.\n")
 
     def _actions(self, state):
-        """Returns the set of legal moves in a state."""
+        """Returns the set of legal moves in a state.
+        Same as _get_possible_moves()"""
     
     def _result(self, state, action):
-        """The transition model, which defines the result of a move"""
+        """The transition model, which defines the result of a move
+        OR returns a number representing score after move."""
+        # Do we need 'state' if _set_edge already changes self.state?
+        # action = (box, edge)
+        self._set_edge(action[0], action[1])
+        # Does it make a diff' if we do 2 if statements vs if/else?
+        if self._player():
+            return self.player_max_score
+        else:
+            return self.player_min_score
+    
+    def _value(self, state, action, horizon):
+        """ same as _result() OR Returns util val
+        """
+        if self._cutoff_test(state, horizon):
+            return self._evaluation(state)
+
+        # action = (box, edge)
+        self._set_edge(action[0], action[1])
+        # Does it make a diff' if we do 2 if statements vs if/else?
+        # Does it make a diff' if we start 2 with "next player" vs "current player"?
+        if self._player():
+            return self._max_value()
+        else:
+            return self._min_value()
+
 
     def _terminal_test(self, state):
         """ A terminal test, which is true when the game is over and false otherwise. 
         States where the game has ended are called terminal states.
         Terminal state is when all edges are filled/popped.
+
+        Replace the terminal test by a cutoff test that decides when to apply EVAL.
         """
         if self._get_possible_moves(state) == []:
             if self.player_max_score > self.player_min_score:
@@ -263,17 +323,32 @@ class BoxGame:
             return True
         else:
             return False
+        
+    def _cutoff_test(self, state, horizon):
+        """ Uses ply limit (aka horizon) to determine when to stop and evaluate the utility up to that point. """
+        if horizon <= 0:
+            return True
+        else:
+            return False
 
-    def _utility(self, state):
-        """A payoff function.  Defines the final numeric value for a game 
-        that ends in terminal state s for a player p. 
-        Outcome is win, loss, or draw (+1, 0, 1/2)
+    def _evaluation(self, state):
+        """
+        A modified utility function.
+        A payoff function. Defines the final numeric value for a game
+        using heuristic evaluation function A*, which estimates the position’s utility
         """
         if self._player():
             return self.player_max_score
         else:
             return self.player_min_score
 
+"""
+the suggestion is to alter minimax in two ways: 
+
+1. Replace the utility function by a heuristic evaluation function EVAL, which estimates the position’s utility; and
+2. Replace the terminal test by a cutoff test that decides when to apply EVAL.
+
+"""
         
 easy_2x2 = 4   # boxes
 
