@@ -2,6 +2,7 @@
 import random
 import math
 import heapq
+import numpy as np
 
 # in check functions, keep in mind alpha-beta pruning 
 # to set up 
@@ -27,7 +28,12 @@ class BoxGame:
             'left_edge': (-1, 'right_edge'),
             'right_edge': (1, 'left_edge')
         }
-        self.random_corner_edge_dict = [[len(self.state) - 1, 'right_edge'], [len(self.state) - 1, 'bottom_edge'], [0, 'top_edge'], [0, 'left_edge']]
+        self.random_corner_edge_dict = [
+            [len(self.state) - 1, 'right_edge'], 
+            [len(self.state) - 1, 'bottom_edge'], 
+            [0, 'top_edge'], 
+            [0, 'left_edge']
+        ]
     
     def _generate_board(self, boxes):
         """ 
@@ -61,8 +67,8 @@ class BoxGame:
         print("\nLegal Moves:\n{}".format(legal_moves))
         
         # Read human's move input
-        value_in = input("Enter the box id and edge from the legal moves returned. Separate answer with a space. " + 
-        "Example:   2 top_edge " +
+        value_in = input("Enter the box id and edge from the legal moves returned. Separate answer with a space.\n" + 
+        "Example:   2 top_edge\n" +
         "Edges selected that are filled (1) will forfeit your turn. \n")
         inputs = value_in.split()
         box = int(inputs[0])
@@ -73,22 +79,23 @@ class BoxGame:
         # If it is legal, make that move (change assigned edge state)
         self._set_edge(box, edge)
         
-    def _get_AI_move(self, state):
+    def _get_AI_move(self, node):
         """ AKA Minimax.  Computates a move, then makes the move it sees best. """
-        move = self.MiniMax_Decision(state)
+        move = self.MiniMax_Decision(node)
         print("AI move: ", move)
         self._set_edge(move[0], move[1])
         return
 
-    def MiniMax_Decision(self, state):
+    def MiniMax_Decision(self, node):
         """ Returns an action """
         # Compute the element a of set S that has a maximum value of f(a)
-        legal_moves = self._get_possible_moves(state)
+        legal_moves = self._get_possible_moves(node['state'])
         print("\nLegal Moves:\n{}".format(legal_moves))
 
         # Rank boxes that only have 1 edge left as top priorities.
         # This gives us a chance to reduce the amount of checks we do below.
         # If I move this below will it automatically break after the first instance of this?
+        # Won't need this once algorithm is complete
         for m in legal_moves:
             if len(m['edges']) == 1:
                 action = [m['box_id'], m['edges'].pop()]
@@ -96,8 +103,8 @@ class BoxGame:
         
         # TODO: Choose edge at random if all util vals are 0 OR 
         # If most of the boxes are empty, return a random edge to save time
-        if self._get_random_edge(state):
-            return self.random_corner_edge_dict.pop()
+        # if self._get_random_edge(node['state']):
+        #     return self.random_corner_edge_dict.pop()
 
         # default returns min at front. To get max, mult val by -
         pq = []
@@ -113,6 +120,7 @@ class BoxGame:
         # let us pop boxes from our PQ n times, where n <= ply limit 
         temp_ply_count = self.ply_limit
 
+        # Can remove later:
         while temp_ply_count > 0:
             current_box = heapq.heappop(weighted_legal_moves)
             current_box = current_box[2]
@@ -123,26 +131,29 @@ class BoxGame:
                 if m == 'top_edge':
                     h = self.ply_limit
                     action = [boxID, m]
-                    t_val = self._min_value(self._value(state, action, h))
+                    t_val = self._min_value(self._result(node, action), h)
                     heapq.heappush(pq, (t_val * -1, pq_c, action))
                     pq_c += 1
+
                 if m == 'bottom_edge':
                     h = self.ply_limit
                     action = [boxID, m]
-                    b_val = self._min_value(self._value(state, action, h))
-                    heapq.heappush(pq, (b_val * -1, pq_c, action))                     
+                    b_val = self._min_value(self._result(node, action), h)
+                    heapq.heappush(pq, (b_val * -1, pq_c, action))
                     pq_c += 1
+
                 if m == 'right_edge':
                     h = self.ply_limit
                     action = [boxID, m]
-                    r_val = self._min_value(self._value(state, action, h))
-                    heapq.heappush(pq, (r_val * -1, pq_c, action))                     
+                    r_val = self._min_value(self._result(node, action), h)
+                    heapq.heappush(pq, (r_val * -1, pq_c, action))  
                     pq_c += 1
+
                 if m == 'left_edge':
                     h = self.ply_limit
                     action = [boxID, m]
-                    l_val = self._min_value(self._value(state, action, h))
-                    heapq.heappush(pq, (l_val * -1, pq_c, action))                     
+                    l_val = self._min_value(self._result(node, action), h)
+                    heapq.heappush(pq, (l_val * -1, pq_c, action))
                     pq_c += 1
 
         # Return max
@@ -150,14 +161,33 @@ class BoxGame:
         action = action[2]
         return action
 
-    def _min_value(self, state, horizon):
+    def _min_value(self, node, depth):
         """ returns a utility value """
+        if self._cutoff_test(node, depth):
+            return self._evaluation(node)
         # v = infinity
         v = 999999
-        legal_moves = self._get_possible_moves(state)
-        for move in legal_moves:
-            v = max(v, self._min_value(self._value(state, move, horizon - 1)))
+        legal_moves_per_box = self._get_possible_moves(node['state'])
+
+        for box in legal_moves_per_box:
+            for edge in box['edges']:
+                action = [box['id'], edge]
+                v = min(v, self._max_value(self._result(node, action), depth - 1))
         return v 
+
+    def _max_value(self, node, depth):
+        """ returns a utility value """
+        if self._cutoff_test(node, depth):
+            return self._evaluation(node)
+        # v = infinity
+        v = -999999
+        legal_moves_per_box = self._get_possible_moves(node['state'])
+
+        for box in legal_moves_per_box:
+            for edge in box['edges']:
+                v = max(v, self._min_value(self._result(node, edge), depth - 1))
+        return v 
+
 
     def _get_random_edge(self, state):
         """ Returns a random corner edge for the AI to choose from to save time 
@@ -207,6 +237,15 @@ class BoxGame:
         else:
             return
 
+    def _box_filled_copy(self, node, box):
+        """ 'Closes' box by changing box_close to True if box is filled. """
+        if (node['state'][box]['edges']['top_edge'] == 1) & (node['state'][box]['edges']['bottom_edge'] == 1) & (node['state'][box]['edges']['left_edge'] == 1) & (node['state'][box]['edges']['right_edge'] == 1):
+            node['state'][box]['box_closed'] = True
+            new_node = self._add_points_copy(node, box)
+            return new_node 
+        else:
+            return node
+
     def _add_points(self, box):
         """ Adds points to player """
         if self._player():
@@ -216,20 +255,102 @@ class BoxGame:
             self.player_min_score += self.state[box]['weight']
             print("AI scores.  Human total: {}. AI total: {}.\n".format(self.player_max_score, self.player_min_score))
 
+    def _add_points_copy(self, node, box):
+        """ Adds points to player """
+        if node['player']:
+            node['player_max_score'] += node['state'][box]['weight']
+            print("Human scores.  Human total: {}. AI total: {}.\n".format(node['player_max_score'], node['player_min_score']))
+            return node
+        else:
+            node['player_min_score'] += node['state'][box]['weight']
+            print("AI scores.  Human total: {}. AI total: {}.\n".format(node['player_max_score'], node['player_min_score']))
+            return node
+
     def _set_edge(self, box, edge):
         """ Flip edge state from 0 (available) to 1 (filled) """
         if not self._get_edge_val(box, edge):
             self.state[box]['edges'][edge] = 1
             # Check if box filled
             self._box_filled(box)
-            print("New state of box: {}.\n".format(self.state[box]))
+            print("New state of box: {}\n".format(self.state[box]))
             # Check adjacent edges
             self._set_adj_edges(box, edge)
         else:
-            # Prints illegal move if edge is already filled.
-            # print("Illegal move")
             # This is also a way for _set_adj_edges & _set_edge to break out of an infinite loop 
             return
+        
+    def _set_edge_copy(self, node, box, edge):
+        if not self._get_edge_val_copy(node, box, edge):
+            node['state'][box]['edges'][edge] = 1
+
+            # Check if box filled
+            new_node = self._box_filled_copy(node, box)
+            print("New state of box: {}\n".format(new_node['state'][box]))
+            
+            # Check adjacent edges
+            new_node = self._set_adj_edges_copy(new_node, box, edge)
+
+            return new_node
+        else:
+            return node
+
+    def _get_edge_val_copy(self, node, box, edge):
+        """ Returns the value within the box's edge selected. Box id will always be same as their index in the state array """
+        edge_value = node['state'][box]['edges'][edge]
+        return edge_value
+
+    def _set_adj_edges_copy(self, node, box, edge):
+        """ Marks off adjacent edges """
+        boxes = int(len(node['state']))
+        if boxes == 1:
+            # single box board doesn't have adjacent boxes to check 
+            return
+        last_box_index = boxes - 1
+        # Corner cases
+        if box == 0:
+            if edge == 'right_edge':
+                new_node = self._set_edge_copy(node, box+1, 'left_edge')
+                return new_node
+            elif edge == 'bottom_edge':
+                x = int(math.sqrt(boxes))
+                new_node = self._set_edge_copy(node, x, 'top_edge')
+                return new_node
+        elif box == last_box_index:
+            if edge == 'left_edge':
+                new_node = self._set_edge_copy(node, last_box_index - 1, 'right_edge')
+                return new_node
+            elif edge == 'top_edge':
+                box_above_index = int(boxes - math.sqrt(boxes) - 1)
+                new_node = self._set_edge_copy(node, box_above_index, 'bottom_edge')
+                return new_node
+        # Middle Cases
+        elif self._is_double_edge_copy(node, box, edge):
+            new_box, new_edge = self.adj_edge_dict[edge]
+            new_box += box
+            new_node = self._set_edge_copy(node, new_box, new_edge)
+            return new_node
+
+    def _is_double_edge_copy(self, node, box, edge):
+        """ 
+        Checks adjacent edges in the middle of the board 
+        Returns True if the edges touch an adjacent box; returns False otherwise.
+        """
+        result = True
+        # Another way to get sqrt of total boxes on board
+        s = int(len(node['state']) ** 0.5)
+        # 1st row
+        if box < s and edge == 'top_edge':
+            result = False
+        # Last row
+        if box >= s * (s-1) and edge == 'bottom_edge':
+            result = False
+        # Left row
+        if box % s == 0 and edge == 'left_edge':
+            result = False
+        # Right row
+        if (box + 1) % s == 0 and edge == 'right_edge':
+            result = False
+        return result
 
     def _set_adj_edges(self, box, edge):
         """ Marks off adjacent edges """
@@ -278,84 +399,12 @@ class BoxGame:
         if (box + 1) % s == 0 and edge == 'right_edge':
             result = False
         return result
-
-    def Play_game(self):
-        """ Plays the game until there is a winner or human terminates game. """
-        state = self.state
-
-        while(self.game_on):
-            if self._player():
-                # Human's turn
-                self._get_human_move(state)
-            else:
-                # AI's turn
-                self._get_AI_move(state)
-                
-            self._terminal_test(self.state)
-            if(self.game_on):
-                self._player_switch()
-
-    def _make_node(self, state, horizon):
-        ''' Creates 1st ply node '''
-        node = {
-            'state': state,
-            'path_cost': 0,
-            'ply_limit': horizon
-        }
-        return node    
-
-    def _player(self):
-        """ 
-        Defines which player has the move in a state. 
-        True  = Human;      False = AI
-        Player max = human;   Player min = AI 
-        """
-        return self.player
-
-    def _player_switch(self):
-        """ 
-        Defines which player has the move in a state. 
-        True  = Human
-        False = AI 
-        """
-        if self.player:
-            self.player = 0
-            print("AI's turn now.\n")
-        else:
-            self.player = 1
-            print("Human's turn now.\n")
-
-    def _actions(self, state):
-        """Returns the set of legal moves in a state.
-        Same as _get_possible_moves()"""
-    
-    def _result(self, state, action):
-        """The transition model, which defines the result of a move
-        OR returns a number representing score after move."""
-        # Do we need 'state' if _set_edge already changes self.state?
-        # action = (box, edge)
-        self._set_edge(action[0], action[1])
-        # Does it make a diff' if we do 2 if statements vs if/else?
-        if self._player():
-            return self.player_max_score
-        else:
-            return self.player_min_score
-    
-    def _value(self, state, action, horizon):
-        """ same as _result() OR Returns util val
-        """
-        if self._cutoff_test(state, horizon):
-            return self._evaluation(state)
-
-        # action = (box, edge)
-        self._set_edge(action[0], action[1])
-        # Does it make a diff' if we do 2 if statements vs if/else?
-        # Does it make a diff' if we start 2 with "next player" vs "current player"?
-        if self._player():
-            return self._max_value()
-        else:
-            return self._min_value()
-
+ 
+    def _result(self, node, action):
+        """The transition model, which defines the result of a move.
+        Returns a new state"""
+        new_node = self._set_edge_copy(node, action[0], action[1])
+        return new_node
 
     def _terminal_test(self, state):
         """ A terminal test, which is true when the game is over and false otherwise. 
@@ -376,25 +425,74 @@ class BoxGame:
         else:
             return False
         
-    def _cutoff_test(self, state, horizon):
-        """ Uses ply limit (aka horizon) to determine when to stop and evaluate the utility up to that point. """
-        if horizon <= 0:
+    def _cutoff_test(self, state, depth):
+        """ Uses ply limit (aka horizon aka depth) to determine when to stop and evaluate the utility up to that point. """
+        if depth <= 0:
             return True
         else:
             return False
 
-    def _evaluation(self, state):
+    def _evaluation(self, node):
+        """ A modified utility function.  A payoff function. """
+        return node['player_max_score'] - node['player_min_score']
+
+    def Play_game(self):
+        """ Plays the game until there is a winner or human terminates game. """
+
+        while(self.game_on):
+            node = self._make_node(self.state, self.ply_limit, self.player, self.player_max_score, self.player_max_score)
+
+            if self._player(node):
+                # Human's turn
+                self._get_human_move(node['state'])
+            else:
+                # AI's turn
+                self._get_AI_move(node)
+                
+            self._terminal_test(self.state)
+            if(self.game_on):
+                self._player_switch()
+
+    def _make_node(self, state, ply_limit, player, max_score, min_score):
+        ''' Creates state node '''
+        node = {
+            'state': state,
+            'ply_limit': ply_limit,
+            'player': player,
+            'player_max_score': max_score,
+            'player_min_score': min_score
+        }
+        return node    
+
+    def _player(self, node):
+        """ 
+        Defines which player has the move in a state. 
+        True  = Human;      False = AI
+        Player max = human;   Player min = AI 
         """
-        A modified utility function.
-        A payoff function. Defines the final numeric value for a game
-        using heuristic evaluation function A*, which estimates the position’s utility
+        return node['player']
+
+    def _player_switch(self):
+        """ 
+        Defines which player has the move in a state. 
+        True  = Human
+        False = AI 
         """
-        if self._player():
-            return self.player_max_score
+        if self.player:
+            self.player = 0
+            print("AI's turn now.\n")
         else:
-            return self.player_min_score
+            self.player = 1
+            print("Human's turn now.\n")
+   
 
-
+    # def H_MiniMax(self, state, depth):
+    #     if self._cutoff_test(state, depth):
+    #         return self._evaluation(state)
+        
+    #     if self._player(state):
+    #         array = 
+    #         return max([2*k for k in some_array])
 
 
 
