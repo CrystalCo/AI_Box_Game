@@ -27,7 +27,7 @@ class BoxGame:
         return weights
 
     def _create_edges(self, boxes):
-        """ Calculates the number of edges on the board"""
+        """ Calculates the number of edges on the board """
         num_same_side_edge = boxes * (boxes + 1)
         edges = 2 * num_same_side_edge
         # Initialize 2 empty stacks
@@ -40,9 +40,6 @@ class BoxGame:
         self.v_edges = vertical_edges
         print("Edges: {} {}".format(horizontal_edges, vertical_edges))
         return edges
-
-    def _create_vertices(self, box):
-        """ Needed? """
 
     def _player(self, state):
         """ Defines which player has the move in a state. """
@@ -87,3 +84,23 @@ easy_2x2 = 2   # boxes
 
 game = BoxGame(easy_2x2, 2)
 game
+
+# initialize board by making an array of boxed objects
+# objects ARE boxes
+# an array of box
+# each box has values: self. weight; self.topedge; bottomedge; left edge; right edge
+# each box stores information about whether the sides are availabe:  1 taken 0 available (booleans for edges)
+# 
+# to get next set of states; find a place where edge is 0.
+# next state is flipping edge state to 1 means filling it in.
+# perform a check: check if all edges within that box are full 
+# an edge can connect 2 boxes at most, so check adjacent boxes
+# need fn that finds where the boxes are
+# avoid duplicates 
+
+# state is a bunch of boxes
+# boxes flipping booleans
+
+
+#in check functions, keep in mind alpha-beta pruning 
+# to set up 
