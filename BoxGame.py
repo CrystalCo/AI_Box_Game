@@ -49,7 +49,6 @@ class BoxGame:
                 },
                 'box_closed':   False
             }
-            print("Box {}: {}".format(i, box))
             initial_state.append(box)
 
         return initial_state
@@ -59,7 +58,9 @@ class BoxGame:
 
     def _get_human_move(self, state):
         legal_moves = self._get_possible_moves(state)
-        print("\nLegal Moves:\n{}\n".format(legal_moves))
+        print("\nLegal Moves:\n")
+        for moves in legal_moves:
+            print(moves)
         
         # Read human's move input
         value_in = input("Enter the box id and edge from the legal moves returned. Separate answer with a space.\nExample:   2 top_edge \n")
@@ -80,67 +81,37 @@ class BoxGame:
         self._set_edge(move[0], move[1])
         return
 
-    def MiniMax_Decision_2(self, node):
-        """ Returns an action array that contains the box_id and edge. """
-        node_state = node['state']
-
-        # Compute the element a of set S that has a maximum value of f(a)
-        legal_moves = self._get_possible_moves(node_state)
-        box1 = legal_moves[0]
-        print("\nLegal Moves:\n{}\n".format(box1))
-
-        # default returns min at front. To get max, mult val by -
-        pq = []
-        # Tie-breaker counter. 
-        pq_c = 0
-
-        # for box in legal_moves:
-            # For each action available, return the utility value 
-        for edge in box1['edges']:
-            depth = self.ply_limit
-            action = [box1['box_id'], edge]
-            child = self._result(node, action)
-            print("New child: {}".format(child))
-            t_val = self.minimax(child, depth, True)
-            heapq.heappush(pq, (t_val * -1, pq_c, action))
-            pq_c += 1
-
-        # Return max
-        action = heapq.heappop(pq) 
-        action = action[2]
-        return action
-
-    def minimax(self, node, depth, maximizingPlayer):
+    def minimax(self, node, depth, maxPlayer, alpha, beta):
         node_state = copy.deepcopy(node['state'])
         
         if self._cutoff_test(node_state, depth):
             return self._eval(node_state)
 
-        if maximizingPlayer:
-            print("Max Player fn.")
+        if maxPlayer:
             max_v = -9999
             legal_moves_per_box = self._get_possible_moves(node_state)
-            # first_box = legal_moves_per_box[0]
             for box in legal_moves_per_box:
                 for edge in box['edges']:
                     action = [box['box_id'], edge]
-                    # child = self._result(node, action)
                     child = self._make_child_node(node_state, node, action)
-                    v = self.minimax(child, depth - 1, False)
+                    v = self.minimax(child, depth - 1, False, alpha, beta)
                     max_v = max(max_v, v)
+                    alpha = max(alpha, v)
+                    if beta <= alpha:
+                        break
             return max_v
         else:
-            print("Min player fn.")
             min_v = 9999
             legal_moves_per_box = self._get_possible_moves(node_state)
-            # first_box = legal_moves_per_box[0]
             for box in legal_moves_per_box:
                 for edge in box['edges']:
                     action = [box['box_id'], edge]
-                    # child = self._result(node, action)
                     child = self._make_child_node(node_state, node, action)
-                    v = self.minimax(child, depth - 1, True)
+                    v = self.minimax(child, depth - 1, True, alpha, beta)
                     min_v = min(min_v, v)
+                    beta = min(beta, v)
+                    if beta <= alpha:
+                        break
             return min_v
 
     def MiniMax_Decision(self, state):
@@ -164,7 +135,6 @@ class BoxGame:
         pq_c = 0
 
         for box in legal_moves:
-            print("Box: ", box)
             boxID = box['box_id']
 
             # TODO: Implement an "explored" set to remove redundant edges
@@ -175,7 +145,7 @@ class BoxGame:
                 action = [boxID, edge]
                 child_node = self._make_child_node(node_state, state, action)
 
-                t_val = self.minimax(child_node, depth, True)
+                t_val = self.minimax(child_node, depth, True, -9999, 9999)
                 # heapq.heappush(pq, (t_val * -1, pq_c, action))    Multiplied by a negative number so that it would turn positive numbers into negative ones, thus making it higher in the PQ since this PQ is a min heap
                 heapq.heappush(pq, (t_val, pq_c, action))
                 pq_c += 1
@@ -522,12 +492,10 @@ class BoxGame:
 
     def _eval(self, node_state):
         ai_score = copy.deepcopy(self.player_min_score)
-        # print("AI Score eval'ed: ", ai_score)
         for box in node_state:
             if not box['box_closed']:
                 if self._is_box_filled(node_state, box['box_id']):
                     ai_score += box['weight']
-                    print("Score eval'ed: ", ai_score)
         return self.player_max_score - ai_score
 
     def _evaluation(self, node):
@@ -550,9 +518,12 @@ the suggestion is to alter minimax in two ways:
 2. Replace the terminal test by a cutoff test that decides when to apply EVAL.
 
 """
-        
-easy_2x2 = 4   # boxes
+oneByOne = 1   # boxes
+twoByTwo = 4   # boxes
+threeByThree = 9   # boxes
+fourByFour = 16   # boxes
 
-game = BoxGame(easy_2x2, 1)
+
+game = BoxGame(twoByTwo, 1)
 game.Play_game()
 
