@@ -8,9 +8,12 @@ import copy
 class BoxGame:
     # When the game starts the human player will specify the board size and ply limit
     def __init__(self, state, ply_limit, player=1):
-        """ The size of the board is the number of boxes to fill
-        The state of the board with randomly generated weights """
+        """ 
+            The size of the board is the number of boxes to fill
+            The state of the board with randomly generated weights 
+        """
         self.state = self._generate_board(state)
+        self.box_length = math.sqrt(state)
         # how many plys the AI will search (i.e., the horizon for the minimax)
         self.ply_limit = ply_limit
         # Player max = human
@@ -47,18 +50,6 @@ class BoxGame:
             print("AI scores.  Human total: {}. AI total: {}.\n".format(node['player_max_score'], node['player_min_score']))
             return node
 
-    def _adj_box_filled(self, node):
-        """ Check if marking off an adjacent box resulted in its neighbor's box getting filled. """
-        new_node = node
-        for box in node['state']:
-            if not box['box_closed']:
-                if (box['edges']['top_edge'] == 1) & (box['edges']['bottom_edge'] == 1) & (box['edges']['left_edge'] == 1) & (box['edges']['right_edge'] == 1):
-                    node['state'][box['box_id']]['box_closed'] = True
-                    new_node = self._add_points_copy(node, box['box_id'])
-                    return new_node 
-        # else no adjacent boxes were filled. Can return original node
-        return new_node
-
     def _box_filled(self, box):
         """ 'Closes' box by changing box_close to True if box is filled. """
         if (self.state[box]['edges']['top_edge'] == 1) & (self.state[box]['edges']['bottom_edge'] == 1) & (self.state[box]['edges']['left_edge'] == 1) & (self.state[box]['edges']['right_edge'] == 1):
@@ -67,14 +58,22 @@ class BoxGame:
         else:
             return
 
-    def _box_filled_copy(self, node, box):
-        """ 'Closes' box by changing box_close to True if box is filled. """
-        if self._is_box_filled(node['state'], box):
-            node['state'][box]['box_closed'] = True
-            new_node = self._add_points_copy(node, box)
-            return new_node 
-        else:
-            return node
+    def _coordinate_to_edge(self, i, j, box_length):
+        """ Return format is tuple (box_id, edge) """
+        # Horizontal line on the top
+        if i % 2 == 0:
+            if i == 0:
+                return (int((j - 1) / 2), 'top_edge')
+        # Horizontal line anywhere else
+            else:
+                return (int(box_length * (i / 2 - 1) + (j - 1) / 2), 'bottom_edge')
+        # Vertical line on the left row
+        if i % 2 == 1:
+            if j == 0:
+                return (int(box_length * (i - 1) / 2), 'left_edge')
+            # Vertical line anywhere else
+            else:
+                return (int(box_length * (i - 1) / 2 + (j / 2) - 1), 'right_edge')
 
     def _cutoff_test(self, node_state, depth):
         """ Uses ply limit (aka horizon aka depth) to determine when to stop and evaluate the utility up to that point. """
@@ -83,13 +82,23 @@ class BoxGame:
         else:
             return False
     
-    def _eval(self, node_state):
+    def _eval(self, node_state, horizon):
         """ A modified utility function.  A payoff function. """
+        # We want the current AI score copy to make the util val higher in the differene, 
+        # thus ranking it higher in the PQ 
         ai_score = copy.deepcopy(self.player_min_score)
         for box in node_state:
             if not box['box_closed']:
                 if self._is_box_filled(node_state, box['box_id']):
                     ai_score += box['weight']
+
+                    # We have a box with a single edge after 1 ply deep.
+                    # Only check if the global ply limit is more than 1 
+                    # to not affect results for games with only 1 ply limit depth. 
+                    if horizon == self.ply_limit and self.ply_limit > 1:
+                        # ranks it higher in the PQ
+                        ai_score += 5
+
         return self.player_max_score - ai_score
         
     def _generate_board(self, boxes):
@@ -115,12 +124,11 @@ class BoxGame:
 
         return initial_state
 
-
     def _get_AI_move(self, node_state):
         """ Computates a move, then makes the move it sees best. """
         state = copy.deepcopy(node_state)
         move = self.MiniMax_Decision(state)
-        print("AI move: {}\n".format(move))
+        print("\nAI's move is box {}, edge: {}\n".format(move[0], move[1]))
         self._set_edge(move[0], move[1])
         return
 
@@ -130,18 +138,16 @@ class BoxGame:
         return edge_value
 
     def _get_human_move(self, state):
-        legal_moves = self._get_possible_moves(state)
-        print("\nLegal Moves:")
-        for moves in legal_moves:
-            print(moves)
-        
         # Read human's move input
-        value_in = input("Enter the box id and edge from the legal moves returned. Separate answer with a space.\nExample:   2 top_edge \n")
+        value_in = input("\nChoose the coordinate of the edge you'd like to insert.\n" +
+            "The first integer should be the row number, 2nd integer should be column. \nSeparate by space. Example: 0 1\nWill return the top edge of the first box. \n")
+        
         inputs = value_in.split()
-        box = int(inputs[0])
-        edge = inputs[1]
+        inputs[0] = int(inputs[0])
+        inputs[1] = int(inputs[1])
+        box, edge = self._coordinate_to_edge(inputs[0], inputs[1], self.box_length)
 
-        print("\nYour input was: {} {}\n".format(box, edge))
+        print("\nYour input was for box {}, edge {}\n".format(box, edge))
 
         # If it is legal, make that move (change assigned edge state)
         self._set_edge(box, edge)
@@ -293,7 +299,7 @@ class BoxGame:
         node_state = copy.deepcopy(node['state'])
         
         if self._cutoff_test(node_state, depth):
-            return self._eval(node_state)
+            return self._eval(node_state, depth)
 
         if maxPlayer:
             max_v = -9999
@@ -320,7 +326,7 @@ class BoxGame:
         node_state = copy.deepcopy(node['state'])
         
         if self._cutoff_test(node_state, depth):
-            return self._eval(node_state)
+            return self._eval(node_state, depth)
 
         if maxPlayer:
             max_v = -9999
@@ -354,11 +360,6 @@ class BoxGame:
         # Compute the element a of set S that has a maximum value of f(a)
         node_state = copy.deepcopy(state)
         legal_moves = self._get_possible_moves(node_state)
-        print("Legal Moves:")
-        for move in legal_moves:
-            print(move)
-        
-        print()
 
         # To reduce time it takes to make moves in the beginning of the game:
         if self.ply_limit >= 2 and len(legal_moves) > 8:
@@ -374,21 +375,16 @@ class BoxGame:
         for box in legal_moves:
             boxID = box['box_id']
 
-            # Optimization tip: Implement an "explored" set to remove redundant edges
-    
             # For each action available, return the utility value 
             for edge in box['edges']:
                 depth = copy.deepcopy(self.ply_limit)
                 action = [boxID, edge]
                 child_node = self._make_child_node(node_state, state, action)
-
-                # Not returning the correct t-val.  Looks beyond boxes with only 1 edge left and assigns those values the same as if they were moves with only 1 edge left to fill the box.
-                # t_val = self.minimax(child_node, depth, False)
                 t_val = self.minimax_alpha_beta(child_node, depth, False, -9999, 9999)
                 heapq.heappush(pq, (t_val, pq_c, action))
                 pq_c += 1
 
-        # Return min
+        # Return action with minimum util val
         action = heapq.heappop(pq) 
         action = action[2]
         return action
@@ -399,6 +395,8 @@ class BoxGame:
         while(self.game_on):        
             node = self._make_node()
             node_state = copy.deepcopy(node['state'])
+  
+            self._print_board_state()
             
             if self._player():
                 # Human's turn
@@ -431,7 +429,62 @@ class BoxGame:
         else:
             self.player = 1
             print("Human's turn now.")
-   
+
+    def _print_board_state(self):
+        box_length = int(len(self.state) ** 0.5)
+        print('   ', end='')
+        for i in range(2 * box_length + 1):
+            print(i, end=' ')
+        print()
+        print('  ', end='')
+        for i in range(12 * box_length):
+            print('_', end='')
+        print()
+        for i in range(2 * box_length + 1):
+            print(i, end='| ')
+            for j in range(2 * box_length + 1):
+                # *'s
+                if i % 2 == 0 and j % 2 == 0:
+                    print('* ', end='')
+                # Horizontal lines on the top row
+                elif i % 2 == 0 and j % 2 == 1 and i == 0:
+                    box_index = int((j - 1) / 2)
+                    filled_edge = bool(self.state[box_index]['edges']['top_edge'])
+                    if filled_edge:
+                        print('- ', end='')
+                    else:
+                        print('  ', end='')
+                # Horizontal lines everywhere else
+                elif i % 2 == 0 and j % 2 == 1 and i != 0:
+                    box_index = int(box_length * ((i / 2) - 1) + (j - 1) / 2)
+                    filled_edge = bool(self.state[box_index]['edges']['bottom_edge'])
+                    if filled_edge:
+                        print('- ', end='')
+                    else:
+                        print('  ', end='')
+                # Vertical lines on the left row
+                elif i % 2 == 1 and j % 2 == 0 and j == 0:
+                    box_index = int((i - 1) / 2) * box_length
+                    filled_edge = bool(self.state[box_index]['edges']['left_edge'])
+                    if filled_edge:
+                        print('| ', end='')
+                    else:
+                        print('  ', end='')
+                # Vertical lines everywhere else
+                elif i % 2 == 1 and j % 2 == 0 and j != 0:
+                    box_index = int((i - 1) / 2 * box_length + (j - 1) / 2)
+                    filled_edge = bool(self.state[box_index]['edges']['right_edge'])
+                    if filled_edge:
+                        print('| ', end='')
+                    else:
+                        print('  ', end='')
+
+                else:
+                    if (i + j) % 2 == 0:
+                        box_index = int(box_length * (i - 1) / 2 + (j - 1) / 2)
+                        print(self.state[box_index]['weight'], end=' ')
+            print()
+    
     def _set_adj_edges(self, box, edge):
         """ Marks off adjacent edges """
         boxes = len(self.state)
@@ -457,20 +510,6 @@ class BoxGame:
             new_box, new_edge = self.adj_edge_dict[edge]
             new_box += box
             self._set_edge(new_box, new_edge)
-
-    def _set_adj_edges_copy(self, node, box, edge):
-        """ Marks off adjacent edges """
-        boxes = int(len(node['state']))
-        if boxes == 1:
-            # single box board doesn't have adjacent boxes to check 
-            return node
-        if self._is_double_edge_copy(node, box, edge):
-            new_box, new_edge = self.adj_edge_dict[edge]
-            new_box += box
-            new_node = self._set_edge_copy(node, new_box, new_edge)
-            return new_node
-        else:
-            return node
 
     def _set_edge(self, box, edge):
         """ Flip edge state from 0 (available) to 1 (filled) """
@@ -531,4 +570,3 @@ fourByFour = 16   # boxes
 
 game = BoxGame(twoByTwo, 2)
 game.Play_game()
-
