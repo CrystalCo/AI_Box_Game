@@ -92,11 +92,11 @@ class BoxGame:
                 if self._is_box_filled(node_state, box['box_id']):
                     ai_score += box['weight']
 
-                    # We have a box with a single edge after 1 ply deep.
-                    # Only check if the global ply limit is more than 1 
-                    # to not affect results for games with only 1 ply limit depth. 
+                    # This means we have a box with a single edge within the first ply check.
+                    # If it is, we want to rank this score higher so that it's picked first by the PQ.
+                    # This helps optimize the answer selected by the minimax_decision since ply limits >= 2
+                    # were generating the same util value for boxes that could be won in 2 moves.
                     if horizon == self.ply_limit and self.ply_limit > 1:
-                        # ranks it higher in the PQ
                         ai_score += 5
 
         return self.player_max_score - ai_score
@@ -295,7 +295,7 @@ class BoxGame:
         }
         return node
 
-    def minimax(self, node, depth, maxPlayer):
+    def MiniMax(self, node, depth, maxPlayer, alpha, beta):
         node_state = copy.deepcopy(node['state'])
         
         if self._cutoff_test(node_state, depth):
@@ -308,36 +308,10 @@ class BoxGame:
                 for edge in box['edges']:
                     action = [box['box_id'], edge]
                     child = self._make_child_node(node_state, node, action)
-                    v = self.minimax(child, depth - 1, False)
-                    max_v = max(max_v, v)
-            return max_v
-        else:
-            min_v = 9999
-            legal_moves_per_box = self._get_possible_moves(node_state)
-            for box in legal_moves_per_box:
-                for edge in box['edges']:
-                    action = [box['box_id'], edge]
-                    child = self._make_child_node(node_state, node, action)
-                    v = self.minimax(child, depth - 1, True)
-                    min_v = min(min_v, v)
-            return min_v
-
-    def minimax_alpha_beta(self, node, depth, maxPlayer, alpha, beta):
-        node_state = copy.deepcopy(node['state'])
-        
-        if self._cutoff_test(node_state, depth):
-            return self._eval(node_state, depth)
-
-        if maxPlayer:
-            max_v = -9999
-            legal_moves_per_box = self._get_possible_moves(node_state)
-            for box in legal_moves_per_box:
-                for edge in box['edges']:
-                    action = [box['box_id'], edge]
-                    child = self._make_child_node(node_state, node, action)
-                    v = self.minimax_alpha_beta(child, depth - 1, False, alpha, beta)
-                    max_v = max(max_v, v)
-                    alpha = max(alpha, v)
+                    util_value = self.MiniMax(child, depth - 1, False, alpha, beta)
+                    max_v = max(max_v, util_value)
+                    beta = max(beta, util_value)
+                    # Prunes the remainder if better edge option was available earlier
                     if beta <= alpha:
                         break
             return max_v
@@ -348,9 +322,9 @@ class BoxGame:
                 for edge in box['edges']:
                     action = [box['box_id'], edge]
                     child = self._make_child_node(node_state, node, action)
-                    v = self.minimax_alpha_beta(child, depth - 1, True, alpha, beta)
-                    min_v = min(min_v, v)
-                    beta = min(beta, v)
+                    util_value = self.MiniMax(child, depth - 1, True, alpha, beta)
+                    min_v = min(min_v, util_value)
+                    alpha = min(alpha, util_value)
                     if beta <= alpha:
                         break
             return min_v
@@ -367,7 +341,7 @@ class BoxGame:
             if random_move != []:
                 return random_move
 
-        # default returns min at front. To get max, mult val by -
+        # default returns min at front.
         pq = []
         # Tie-breaker counter. 
         pq_c = 0
@@ -380,8 +354,8 @@ class BoxGame:
                 depth = copy.deepcopy(self.ply_limit)
                 action = [boxID, edge]
                 child_node = self._make_child_node(node_state, state, action)
-                t_val = self.minimax_alpha_beta(child_node, depth, False, -9999, 9999)
-                heapq.heappush(pq, (t_val, pq_c, action))
+                util_val = self.MiniMax(child_node, depth, False, 9999, -9999)
+                heapq.heappush(pq, (util_val, pq_c, action))
                 pq_c += 1
 
         # Return action with minimum util val
@@ -568,5 +542,6 @@ twoByTwo = 4   # boxes
 threeByThree = 9   # boxes
 fourByFour = 16   # boxes
 
-game = BoxGame(twoByTwo, 2)
+game = BoxGame(threeByThree, 3)
+
 game.Play_game()
